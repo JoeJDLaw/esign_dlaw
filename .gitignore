@@ -1,0 +1,27 @@
+# Logs
+logs/
+*.log
+
+# CSVs and data
+*.csv
+
+# Python environment
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Bytecode cache
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+*.env
