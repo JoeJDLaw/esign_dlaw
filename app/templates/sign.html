@@ -1,0 +1,158 @@
+<!-- File: /srv/apps/esign/app/templates/sign.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign Document - {{ client_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f9f9fb;
+            color: #333;
+            max-width: 700px;
+            margin: 2rem auto;
+            padding: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            background: white;
+        }
+
+        h1 {
+            text-align: center;
+            color: #004085;
+        }
+
+        .consent-box {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background-color: #e9ecef;
+            border-left: 5px solid #004085;
+        }
+
+        .signature-pad {
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            height: 200px;
+            cursor: crosshair;
+            width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .buttons {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        button {
+            background-color: #004085;
+            color: white;
+            border: none;
+            padding: 0.7rem 1.5rem;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #002752;
+        }
+
+        #consent {
+            margin-right: 0.5rem;
+        }
+
+        label {
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <h1>Signature Request for {{ client_name }}</h1>
+
+    <div class="consent-box">
+        <label>
+            <input type="checkbox" id="consent">
+            I confirm that I am {{ client_name }} and I agree to sign this document electronically in accordance with the ESIGN Act and UETA.
+        </label>
+    </div>
+
+    <p>Please draw your signature below:</p>
+    <canvas id="signature-pad" class="signature-pad"></canvas>
+
+    <div class="buttons">
+        <button id="clear-btn" type="button">Clear</button>
+        <button id="submit-btn" type="button">Sign Document</button>
+    </div>
+
+    <script src="/static/js/signature_pad.min.js"></script>
+    <script>
+        const canvas = document.getElementById('signature-pad');
+        const signaturePad = new window.SignaturePad(canvas);
+
+        // Resize canvas for high-DPI screens
+        function resizeCanvas() {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            // Save current signature
+            const data = signaturePad.toData();
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext('2d').scale(ratio, ratio);
+            signaturePad.clear();
+            signaturePad.fromData(data);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        // Initial resize
+        resizeCanvas();
+
+        document.getElementById('clear-btn').addEventListener('click', () => {
+            signaturePad.clear();
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            const consentChecked = document.getElementById('consent').checked;
+
+            if (!consentChecked) {
+                alert('You must agree to the terms before signing.');
+                return;
+            }
+
+            if (signaturePad.isEmpty()) {
+                alert('Please provide a signature.');
+                return;
+            }
+
+            const signatureData = signaturePad.toDataURL();
+
+            fetch(`/api/esign/sign/{{ token }}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    signature: signatureData,
+                    consent: true
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Signing failed.');
+                return response.json();
+            })
+            .then(data => {
+                alert('Signature submitted successfully.');
+                window.location.href = '/esign/thank-you';
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error submitting signature.');
+            });
+        });
+    </script>
+</body>
+</html>
