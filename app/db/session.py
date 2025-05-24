@@ -1,45 +1,48 @@
-# File: /srv/apps/esign/app/db/session.py
+"""
+Database session management for the eSign application.
+"""
 
 import os
-import sys
-import logging
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
+from shared.log_utils.logging_config import configure_logging
+
+# Configure logging
+logger = configure_logging(
+    name="esign.db",
+    logfile="esign.log",
+    level=None  # Will use environment-based level
+)
 
 # Load environment variables
 load_dotenv()
 
-# Set up logging to stderr
-logging.basicConfig(
-    stream=sys.stderr,
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/esign")
-logging.debug(f"Using DATABASE_URL: {DATABASE_URL}")
+logger.debug("Using DATABASE_URL: %s", DATABASE_URL)
 
 try:
     engine = create_engine(DATABASE_URL)
     # Test the connection
     with engine.connect() as conn:
-        logging.debug("Successfully connected to database")
+        logger.debug("Successfully connected to database")
 except Exception as e:
-    logging.error(f"Failed to connect to database: {str(e)}", exc_info=True)
+    logger.error("Failed to connect to database: %s", str(e), exc_info=True)
     raise
 
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 
 def get_engine():
+    """Get the SQLAlchemy engine instance."""
     return engine
 
 def get_session():
+    """Get a new database session."""
     try:
         session = SessionLocal()
         # Test the session using text()
         session.execute(text("SELECT 1"))
         return session
     except Exception as e:
-        logging.error(f"Failed to create database session: {str(e)}", exc_info=True)
+        logger.error("Failed to create database session: %s", str(e), exc_info=True)
         raise

@@ -6,7 +6,8 @@
     <meta charset="UTF-8">
     <title>Sign Document - {{ client_name }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="{{ url_for('static', filename='assets/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/legacy/style.css') }}">
     <style>
         body {
             font-family: 'Segoe UI', sans-serif;
@@ -90,7 +91,7 @@
         <button id="submit-btn" type="button">Sign Document</button>
     </div>
 
-    <script src="/static/js/signature_pad.min.js"></script>
+    <script src="{{ url_for('static', filename='js/legacy/signature_pad.min.js') }}"></script>
     <script>
         const canvas = document.getElementById('signature-pad');
         const signaturePad = new window.SignaturePad(canvas);

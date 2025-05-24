@@ -1,28 +1,36 @@
-# File: /srv/apps/esign/run.py
-import logging
+"""
+Entrypoint for the eSign application.
+"""
+
+import os
 import sys
 import traceback
-from flask import Flask, jsonify
-from app.api.routes_api import api_bp
+from flask import jsonify
+from app import create_app
+from shared.log_utils.logging_config import configure_logging
 
-# Configure logging to stderr with more detail
-logging.basicConfig(
-    stream=sys.stderr,
-    level=logging.DEBUG,
-    format='%(asctime)s %(levelname)s: %(message)s\n%(pathname)s:%(lineno)d'
+# Configure logging first
+logger = configure_logging(
+    name="esign",
+    logfile="esign.log",
+    level=None  # Will use environment-based level
 )
 
-app = Flask(__name__)
-app.register_blueprint(api_bp)
+# Create the Flask application
+app = create_app()
 
 @app.errorhandler(Exception)
 def handle_error(error):
-    # Log the full traceback
-    app.logger.error("Unhandled error:", exc_info=True)
-    app.logger.error(f"Error type: {type(error).__name__}")
-    app.logger.error(f"Error message: {str(error)}")
-    app.logger.error(f"Traceback: {traceback.format_exc()}")
+    """Global error handler with standardized logging."""
+    logger.error("Unhandled error:", exc_info=True)
+    logger.error("Error type: %s", type(error).__name__)
+    logger.error("Error message: %s", str(error))
+    logger.error("Traceback: %s", traceback.format_exc())
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    port = int(os.getenv("FLASK_PORT", 5000))
+    
+    logger.info("Starting eSign application on port %d (debug: %s)", port, debug)
+    app.run(debug=debug, port=port)
