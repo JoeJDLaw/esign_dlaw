@@ -4,7 +4,7 @@ from sqlalchemy import (
     Column, String, DateTime, Enum, JSON, Text, Boolean, Integer
 )
 from sqlalchemy.dialects.postgresql import UUID, INET
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 import enum
 import uuid
 import datetime

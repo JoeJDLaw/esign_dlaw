@@ -19,15 +19,6 @@ logger = configure_logging(
 # Create the Flask application
 app = create_app()
 
-@app.errorhandler(Exception)
-def handle_error(error):
-    """Global error handler with standardized logging."""
-    logger.error("Unhandled error:", exc_info=True)
-    logger.error("Error type: %s", type(error).__name__)
-    logger.error("Error message: %s", str(error))
-    logger.error("Traceback: %s", traceback.format_exc())
-    return jsonify({"error": "Internal server error"}), 500
-
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     port = int(os.getenv("FLASK_PORT", 5000))
