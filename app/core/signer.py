@@ -13,6 +13,7 @@ import base64
 import io
 import logging
 import os
+import re
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -55,15 +56,36 @@ def embed_signature_on_pdf(
             raise FileNotFoundError(f"Template PDF not found: {template_path}")
         logger.info(f"Template PDF found: {template_path}")
 
-        # Decode the base64 signature string
+        # Normalize and extract Base64 data
+        logger.debug(f"Raw signature input: {signature_b64[:30]!r}...")
+        b64_data = signature_b64.strip()
+        # If it's a Data‑URI, extract the part after "base64,"
+        match = re.match(r"^data:.*?;base64,(.+)$", b64_data, re.IGNORECASE)
+        if match:
+            b64_data = match.group(1).strip()
+
+        # Remove any whitespace or non-base64 characters
+        b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_data)
+
+        # Add padding if necessary
+        missing_padding = len(b64_clean) % 4
+        if missing_padding:
+            b64_clean += '=' * (4 - missing_padding)
+
+        # Decode with validation
         try:
-            signature_bytes = base64.b64decode(signature_b64.split(",")[-1])
+            signature_bytes = base64.b64decode(b64_clean, validate=True)
+        except Exception as decode_err:
+            logger.error(f"Failed to decode base64 signature: {decode_err}")
+            raise ValueError("Unable to decode signature image") from decode_err
+
+        try:
             signature_img = Image.open(io.BytesIO(signature_bytes))
             signature_img.verify()  # validate image file format
-            signature_img = Image.open(io.BytesIO(signature_bytes))  # re-open after verify
+            signature_img = Image.open(io.BytesIO(signature_bytes))
         except Exception as decode_err:
             logger.error("Failed to decode and parse signature image.")
-            raise ValueError("Invalid signature image format or corrupt base64 string.") from decode_err
+            raise ValueError("Invalid signature image format or corrupt data.") from decode_err
         logger.info("Signature image successfully decoded and verified.")
 
         # Create a PDF overlay in memory with the signature and client name/date

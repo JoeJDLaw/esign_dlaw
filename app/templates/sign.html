@@ -5,7 +5,7 @@
     <title>Sign Document - {{ client_name }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ url_for('static', filename='assets/favicon.ico') }}" type="image/x-icon">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/legacy/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='esign/css/esign-sign.css') }}">
     <style>
         body {
             font-family: 'Segoe UI', sans-serif;
@@ -95,6 +95,7 @@
             client_name: "{{ client_name }}"
         };
     </script>
-    <script src="{{ url_for('static', filename='js/esign/sign.js') }}"></script>
+    <script src="{{ url_for('static', filename='esign/js/signature_pad.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='esign/js/esign-sign.js') }}"></script>
 </body>
 </html>

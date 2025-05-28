@@ -1,9 +1,7 @@
-import sys
-sys.path.insert(0, "/srv/shared")
 from shared.log_utils.logging_config import configure_logging
 logger = configure_logging("apps.esign.routes_api", "esign.log")
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 from app.db.models import SignatureRequest, SignatureStatus
 from app.db.session import get_session
 from datetime import datetime, timedelta, timezone
@@ -16,7 +14,7 @@ import hashlib
 api_bp = Blueprint("esign_api", __name__, url_prefix="/api/v1")
 
 def is_valid_hmac_request(request):
-    shared_secret = os.environ.get("SALESFORCE_SHARED_SECRET", "").encode()
+    shared_secret = os.environ.get("SF_SECRET_KEY", "").encode()
     timestamp = request.headers.get("X-Timestamp", "")
     signature = request.headers.get("X-Signature", "")
 
@@ -55,9 +53,8 @@ def create_audit_log_event(event: str, **details):
 
 @api_bp.route("/initiate", methods=["POST"])
 def initiate_signature():
-    # HMAC validation temporarily disabled for testing
-    # if not is_valid_hmac_request(request):
-    #     return jsonify({"error": "Unauthorized"}), 401
+    if not is_valid_hmac_request(request):
+        return jsonify({"error": "Unauthorized"}), 401
 
     logger.info("Processing new signature request initiation")
     data = request.get_json()
@@ -147,4 +144,4 @@ def sign_document(token):
 
     session.commit()
     logger.info(f"Successfully processed signature for client: {signature_request.client_name}")
-    return jsonify({"message": "Document signed successfully"}), 200
+    return render_template("thank-you.html", client_name=signature_request.client_name)

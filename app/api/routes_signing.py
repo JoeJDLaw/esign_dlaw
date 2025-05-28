@@ -1,7 +1,5 @@
 # File: /srv/apps/esign/app/api/routes_signing.py
 
-import sys
-sys.path.insert(0, "/srv/shared")
 from shared.log_utils.logging_config import configure_logging
 logger = configure_logging("apps.esign.routes_signing", "esign.log")
 
@@ -38,6 +36,7 @@ def sign_document(token):
         logger.warning(f"Signature link expired. Token: {token[:8]}..., Expires: {signature_request.expires_at}")
         return "This link has expired.", 403
 
+    logger.debug(f"template_type from DB: '{signature_request.template_type}'")
     try:
         template_path = get_template_path(signature_request.template_type)
         logger.info(f"Template path resolved for signing: {template_path}")
@@ -73,9 +72,15 @@ def submit_signature(token):
         logger.warning(f"Signature link expired. Token: {token[:8]}..., Expires: {signature_request.expires_at}")
         return "This link has expired.", 403
 
-    signature_b64 = request.form.get("signature")
+    # Accept signature from either JSON payload or form data
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        signature_b64 = payload.get("signature")
+    else:
+        signature_b64 = request.form.get("signature")
+
     if not signature_b64:
-        logger.warning(f"Signature missing in form submission. Token: {token[:8]}...")
+        logger.warning(f"Signature missing in submission. Token: {token[:8]}...")
         return "Missing signature data.", 400
 
     try:
@@ -105,3 +110,7 @@ def submit_signature(token):
     except Exception as e:
         logger.exception(f"Error while processing signature for token: {token[:8]}...")
         return "An error occurred while saving the signed document.", 500
+
+@signing_bp.route("/thank-you", methods=["GET"])
+def thank_you():
+    return render_template("thank-you.html")

@@ -17,6 +17,11 @@ from shared.log_utils.logging_config import configure_logging
 logger = configure_logging(name="apps.esign.pdf_loader", logfile="esign.log", level=None)
 
 TEMPLATE_MAP = {
+    # Primary identifiers
+    "cea": "tests/sample_data/cea.pdf",
+    "cea_rra": "tests/sample_data/cea_rra.pdf",
+
+    # Legacy or alias identifiers
     "case_eval": "tests/sample_data/cea.pdf",
     "case_eval_plus_records": "tests/sample_data/cea_rra.pdf"
 }

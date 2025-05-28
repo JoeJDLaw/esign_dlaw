@@ -15,6 +15,12 @@ def create_app():
     app = Flask(__name__)
     app.register_blueprint(api_bp)
     app.register_blueprint(signing_bp)
+
+    @app.route("/thank-you")
+    def thank_you():
+        from flask import render_template
+        return render_template("thank-you.html")
+
     @app.errorhandler(Exception)
     def handle_error(error):
         """Global error handler with standardized logging."""

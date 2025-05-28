@@ -51,11 +51,7 @@ document.addEventListener("DOMContentLoaded", function () {
         })
             .then(response => {
                 if (!response.ok) throw new Error("Signing failed.");
-                return response.json();
-            })
-            .then(data => {
-                alert("Signature submitted successfully.");
-                window.location.href = "/v1/thank-you";
+                window.location.href = "/thank-you";
             })
             .catch(err => {
                 console.error(err);
