@@ -34,3 +34,6 @@ app/static/*.txt
 # Exclude developer notes
 app/static/esign-chatgpt-notes.md
 app/static/esign-troubleshooting-notes.md
+app/static/assets/
+prefill/
+preview/

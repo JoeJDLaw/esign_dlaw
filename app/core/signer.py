@@ -38,8 +38,9 @@ def embed_signature_on_pdf(
     # Signing date coordinates (x, y)
     date_coords: tuple[int, int] = (362, 95),
     test_mode: bool = False,
-    smoke_test: bool = False
-) -> None:
+    smoke_test: bool = False,
+    is_preview: bool = False
+) -> str:
     try:
         logger.info("Starting signature embedding process.")
         if test_mode:
@@ -60,37 +61,47 @@ def embed_signature_on_pdf(
             raise FileNotFoundError(f"Template PDF not found: {template_path}")
         logger.info(f"Template PDF found: {template_path}")
 
-        # Normalize and extract Base64 data
-        logger.debug(f"Raw signature input: {signature_b64[:30]!r}...")
-        b64_data = signature_b64.strip()
-        # If it's a Data‑URI, extract the part after "base64,"
-        match = re.match(r"^data:.*?;base64,(.+)$", b64_data, re.IGNORECASE)
-        if match:
-            b64_data = match.group(1).strip()
+        # --- Signature image handling ---
+        if is_preview:
+            # Use the generic signature image for preview
+            generic_sig_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "assets", "signature_here.png"))
+            if not os.path.isfile(generic_sig_path):
+                logger.error(f"Generic signature image not found: {generic_sig_path}")
+                raise FileNotFoundError(f"Generic signature image not found: {generic_sig_path}")
+            signature_img = Image.open(generic_sig_path).convert("RGBA")
+            logger.info("Using generic signature image for preview PDF.")
+        else:
+            # Normalize and extract Base64 data
+            logger.debug(f"Raw signature input: {signature_b64[:30]!r}...")
+            b64_data = signature_b64.strip()
+            # If it's a Data‑URI, extract the part after "base64,"
+            match = re.match(r"^data:.*?;base64,(.+)$", b64_data, re.IGNORECASE)
+            if match:
+                b64_data = match.group(1).strip()
 
-        # Remove any whitespace or non-base64 characters
-        b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_data)
+            # Remove any whitespace or non-base64 characters
+            b64_clean = re.sub(r'[^A-Za-z0-9+/=]', '', b64_data)
 
-        # Add padding if necessary
-        missing_padding = len(b64_clean) % 4
-        if missing_padding:
-            b64_clean += '=' * (4 - missing_padding)
+            # Add padding if necessary
+            missing_padding = len(b64_clean) % 4
+            if missing_padding:
+                b64_clean += '=' * (4 - missing_padding)
 
-        # Decode with validation
-        try:
-            signature_bytes = base64.b64decode(b64_clean, validate=True)
-        except Exception as decode_err:
-            logger.error(f"Failed to decode base64 signature: {decode_err}")
-            raise ValueError("Unable to decode signature image") from decode_err
+            # Decode with validation
+            try:
+                signature_bytes = base64.b64decode(b64_clean, validate=True)
+            except Exception as decode_err:
+                logger.error(f"Failed to decode base64 signature: {decode_err}")
+                raise ValueError("Unable to decode signature image") from decode_err
 
-        try:
-            signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
-            signature_img.verify()  # validate image file format
-            signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
-        except Exception as decode_err:
-            logger.error("Failed to decode and parse signature image.")
-            raise ValueError("Invalid signature image format or corrupt data.") from decode_err
-        logger.info("Signature image successfully decoded and verified.")
+            try:
+                signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
+                signature_img.verify()  # validate image file format
+                signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
+            except Exception as decode_err:
+                logger.error("Failed to decode and parse signature image.")
+                raise ValueError("Invalid signature image format or corrupt data.") from decode_err
+            logger.info("Signature image successfully decoded and verified.")
 
         # Create a PDF overlay in memory with the signature and client name/date
         overlay_buffer = io.BytesIO()
@@ -121,7 +132,7 @@ def embed_signature_on_pdf(
 
         if smoke_test:
             logger.info("Smoke test complete. PDF pipeline executed successfully.")
-            return
+            return output_path
 
         if not test_mode:
             # Prepend last name and add timestamp to output filename
@@ -136,6 +147,9 @@ def embed_signature_on_pdf(
             with open(output_path, "wb") as f_out:
                 writer.write(f_out)
             logger.info(f"Signed PDF written to: {output_path}")
+            return output_path
+        # If test_mode, just return the intended output_path
+        return output_path
     except Exception as e:
         logger.exception("Error embedding signature on PDF.")
         raise

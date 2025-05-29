@@ -81,6 +81,8 @@ def initiate_signature():
         )
     ]
 
+    full_url = f"https://esign.dlaw.app/v1/sign/{token}"
+
     signature_request = SignatureRequest(
         client_name=data["client_name"],
         client_email=data["client_email"],
@@ -89,14 +91,14 @@ def initiate_signature():
         token_hash=token_hash,
         audit_log=audit_log,
         status=SignatureStatus.pending,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=2)
+        expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+        signing_url=full_url
     )
 
     session.add(signature_request)
     session.commit()
     logger.info(f"Successfully created signature request for client: {data['client_name']}")
 
-    full_url = f"https://esign.dlaw.app/v1/sign/{token}"
     # Send URL to RingCentral webhook for testing
     try:
         rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"

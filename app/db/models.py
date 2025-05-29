@@ -35,3 +35,5 @@ class SignatureRequest(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    preview_path = Column(String, nullable=True)
+    signing_url = Column(String, nullable=True)
