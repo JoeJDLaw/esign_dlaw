@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const signatureData = signaturePad.toDataURL();
 
-        fetch(`/api/v1/sign/${token}`, {
+        fetch(`/v1/sign/${token}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -50,12 +50,23 @@ document.addEventListener("DOMContentLoaded", function () {
             })
         })
             .then(response => {
-                if (!response.ok) throw new Error("Signing failed.");
-                window.location.href = "/thank-you";
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || "Signing failed.");
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    throw new Error("No redirect URL provided.");
+                }
             })
             .catch(err => {
                 console.error(err);
-                alert("Error submitting signature.");
+                alert(err.message || "Error submitting signature.");
             });
     });
 });

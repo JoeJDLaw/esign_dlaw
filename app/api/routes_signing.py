@@ -3,7 +3,7 @@
 from shared.log_utils.logging_config import configure_logging
 logger = configure_logging("apps.esign.routes_signing", "esign.log")
 
-from flask import Blueprint, render_template, abort, request, send_file
+from flask import Blueprint, render_template, abort, request, send_file, jsonify
 from app.db.session import get_session
 from app.db.models import SignatureRequest, SignatureStatus
 from datetime import datetime, timezone, timedelta
@@ -144,19 +144,22 @@ def submit_signature(token):
     session = get_session()
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
+    # Debug log for IP headers
+    logger.info(f"X-Forwarded-For: {request.headers.get('X-Forwarded-For')}, remote_addr: {request.remote_addr}")
+
     signature_request = session.query(SignatureRequest).filter_by(token_hash=token_hash).first()
 
     if not signature_request:
         logger.warning(f"Signature request not found for token: {token[:8]}...")
-        abort(404)
+        return jsonify({"error": "Signature request not found."}), 404
 
     if signature_request.status != SignatureStatus.pending:
         logger.warning(f"Document already signed or invalid. Token: {token[:8]}..., Status: {signature_request.status}")
-        return "This document is no longer available for signing.", 403
+        return jsonify({"error": "This document is no longer available for signing."}), 403
 
     if signature_request.expires_at < datetime.now(timezone.utc):
         logger.warning(f"Signature link expired. Token: {token[:8]}..., Expires: {signature_request.expires_at}")
-        return "This link has expired.", 403
+        return jsonify({"error": "This link has expired."}), 403
 
     # Accept signature from either JSON payload or form data
     if request.is_json:
@@ -167,7 +170,7 @@ def submit_signature(token):
 
     if not signature_b64:
         logger.warning(f"Signature missing in submission. Token: {token[:8]}...")
-        return "Missing signature data.", 400
+        return jsonify({"error": "Missing signature data."}), 400
 
     try:
         template_path = get_template_path(signature_request.template_type)
@@ -175,7 +178,7 @@ def submit_signature(token):
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, f"{token_hash[:8]}_signed.pdf")
 
-        embed_signature_on_pdf(
+        signed_pdf_path = embed_signature_on_pdf(
             template_path=template_path,
             output_path=output_path,
             signature_b64=signature_b64,
@@ -185,7 +188,7 @@ def submit_signature(token):
 
         signature_request.status = SignatureStatus.signed
         signature_request.signed_at = datetime.utcnow()
-        signature_request.pdf_path = output_path
+        signature_request.pdf_path = signed_pdf_path
         # Capture real client IP behind proxy
         xff = request.headers.get("X-Forwarded-For")
         if xff:
@@ -193,17 +196,51 @@ def submit_signature(token):
         else:
             signature_request.signed_ip = request.remote_addr
         signature_request.user_agent = request.headers.get("User-Agent", "")
+        # Log audit event
+        if isinstance(signature_request.audit_log, list):
+            signature_request.audit_log.append({
+                "event": "signed",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
         session.commit()
 
-        logger.info(f"Signature successfully processed. File saved: {output_path}")
-        return render_template("thank-you.html", client_name=signature_request.client_name)
+        redirect_url = f"/v1/sign/final/{token}"
+        logger.info(f"Signature successfully processed. File saved: {signed_pdf_path}. Redirecting to {redirect_url}")
+        return jsonify({"redirect_url": redirect_url})
 
     except Exception as e:
         logger.exception(f"Error while processing signature for token: {token[:8]}...")
-        return "An error occurred while saving the signed document.", 500
+        return jsonify({"error": "An error occurred while saving the signed document."}), 500
 
 @signing_bp.route("/thank-you", methods=["GET"])
 def thank_you():
+    # Try to get token from query string for context (optional, if you want to pass it)
+    token = request.args.get('token')
+    if token:
+        session = get_session()
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        signature_request = session.query(SignatureRequest).filter_by(token_hash=token_hash).first()
+        if signature_request:
+            # Send webhook to RingCentral for signature completion
+            try:
+                rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
+                rc_payload = {
+                    "text": (
+                        f"Signature completed!\n"
+                        f"URL: {signature_request.signing_url}\n"
+                        f"Name: {signature_request.client_name}\n"
+                        f"Email: {signature_request.client_email}\n"
+                        f"Template: {signature_request.template_type}\n"
+                        f"Salesforce Case ID: {signature_request.salesforce_case_id}\n"
+                        f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+                        f"Signed at: {signature_request.signed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if signature_request.signed_at else ''}"
+                    )
+                }
+                import requests
+                rc_response = requests.post(rc_webhook_url, json=rc_payload)
+                logger.info(f"Posted signature complete to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
+            except Exception as e:
+                logger.error(f"Error posting signature complete to RingCentral webhook: {e}")
     return render_template("thank-you.html")
 
 @signing_bp.route("/preview/<filename>", methods=["GET"])
@@ -227,3 +264,47 @@ def serve_prefilled_pdf(filename):
     except Exception as e:
         logger.exception(f"Error serving sample PDF: {e}")
         abort(500)
+
+@signing_bp.route("/signed/<filename>", methods=["GET"])
+def serve_signed_pdf(filename):
+    """
+    Securely serve a signed PDF document by filename.
+    """
+    logger.info(f"Serving signed PDF: {filename}")
+    signed_dir = os.path.abspath("signed")
+    signed_path = os.path.join(signed_dir, filename)
+    if not os.path.exists(signed_path):
+        logger.error(f"Signed PDF not found at: {signed_path}")
+        abort(404)
+    try:
+        return send_file(
+            signed_path,
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.exception(f"Error serving signed PDF: {e}")
+        abort(500)
+
+@signing_bp.route("/final/<token>", methods=["GET"])
+def final_review(token):
+    logger.info(f"Rendering final review for token: {token[:8]}...")
+    session = get_session()
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    signature_request = session.query(SignatureRequest).filter_by(token_hash=token_hash).first()
+
+    if not signature_request or signature_request.status != SignatureStatus.signed:
+        logger.warning(f"Final review not available for token: {token[:8]}...")
+        abort(403)
+
+    # Optionally log the final review event
+    if isinstance(signature_request.audit_log, list):
+        signature_request.audit_log.append({
+            "event": "final_review_viewed",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        session.commit()
+
+    signed_filename = os.path.basename(signature_request.pdf_path)
+    return render_template("final_review.html", client_name=signature_request.client_name, signed_filename=signed_filename, token=token)

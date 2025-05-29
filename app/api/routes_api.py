@@ -102,9 +102,19 @@ def initiate_signature():
     # Send URL to RingCentral webhook for testing
     try:
         rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
-        rc_payload = {"signing_url": full_url}
+        rc_payload = {
+            "text": (
+                f"New document ready for signing:\n"
+                f"URL: {full_url}\n"
+                f"Name: {data.get('client_name', '')}\n"
+                f"Email: {data.get('client_email', '')}\n"
+                f"Template: {data.get('template_type', '')}\n"
+                f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
+                f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            )
+        }
         rc_response = requests.post(rc_webhook_url, json=rc_payload)
-        logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code}")
+        logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
     except Exception as e:
         logger.error(f"Error posting to RingCentral webhook: {e}")
     return jsonify({
