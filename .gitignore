@@ -27,3 +27,10 @@ Thumbs.db
 *.env
 app/static/test.txt
 app/static/*.txt
+
+# Exclude signed PDFs and signed directory entirely
+/signed/
+
+# Exclude developer notes
+app/static/esign-chatgpt-notes.md
+app/static/esign-troubleshooting-notes.md

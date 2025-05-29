@@ -31,8 +31,12 @@ def embed_signature_on_pdf(
     signature_b64: str,
     client_name: str,
     sign_date: str,
-    signature_coords: tuple[int, int] = (100, 100),
-    name_coords: tuple[int, int] = (100, 150),
+     # Client name coordinates (x, y)
+    name_coords: tuple[int, int] = (120, 137),
+    # Signature image coordinates (x, y)
+    signature_coords: tuple[int, int] = (130, 90),
+    # Signing date coordinates (x, y)
+    date_coords: tuple[int, int] = (362, 95),
     test_mode: bool = False,
     smoke_test: bool = False
 ) -> None:
@@ -80,9 +84,9 @@ def embed_signature_on_pdf(
             raise ValueError("Unable to decode signature image") from decode_err
 
         try:
-            signature_img = Image.open(io.BytesIO(signature_bytes))
+            signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
             signature_img.verify()  # validate image file format
-            signature_img = Image.open(io.BytesIO(signature_bytes))
+            signature_img = Image.open(io.BytesIO(signature_bytes)).convert("RGBA")
         except Exception as decode_err:
             logger.error("Failed to decode and parse signature image.")
             raise ValueError("Invalid signature image format or corrupt data.") from decode_err
@@ -92,14 +96,17 @@ def embed_signature_on_pdf(
         overlay_buffer = io.BytesIO()
         c = canvas.Canvas(overlay_buffer, pagesize=letter)
 
-        # Draw the signature image at the given coordinates
-        c.drawImage(ImageReader(signature_img), *signature_coords, width=200, height=50)
-
-        # Draw the client name and signing date
+        # -- Position adjustments --
+        # You can fine-tune coordinates below for layout precision.
+        # Adjusted signature size to better fit the line space
+        c.drawImage(ImageReader(signature_img), *signature_coords, width=160, height=35, mask='auto')
+        # Draw the client name
         c.setFont("Helvetica", 10)
-        c.drawString(*name_coords, f"{client_name} - {sign_date}")
+        c.drawString(*name_coords, client_name)
+        # Draw the signing date
+        c.drawString(*date_coords, sign_date)
         c.save()
-        logger.info("Overlay PDF with signature and name created.")
+        logger.info("Overlay PDF with signature, name, and date created.")
 
         # Read both the original template and the overlay PDF
         overlay_buffer.seek(0)
@@ -117,6 +124,14 @@ def embed_signature_on_pdf(
             return
 
         if not test_mode:
+            # Prepend last name and add timestamp to output filename
+            last_name = client_name.strip().split()[-1].lower()
+            output_dir = os.path.dirname(output_path)
+            base_output_name = os.path.basename(output_path)
+            timestamp_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+            name_part, ext_part = os.path.splitext(base_output_name)
+            final_output_name = f"{last_name}_{name_part}_{timestamp_suffix}{ext_part}"
+            output_path = os.path.join(output_dir, final_output_name)
             # Write the signed output PDF to the given path
             with open(output_path, "wb") as f_out:
                 writer.write(f_out)
@@ -142,9 +157,17 @@ if __name__ == "__main__":
     with open(args.signature, "r") as sig_file:
         signature_data = sig_file.read().strip()
 
+    # Add timestamp to output filename
+    from datetime import datetime
+    import os
+
+    timestamp_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_output, ext = os.path.splitext(args.output)
+    output_with_timestamp = f"{base_output}_{timestamp_suffix}{ext}"
+
     embed_signature_on_pdf(
         template_path=args.template,
-        output_path=args.output,
+        output_path=output_with_timestamp,
         signature_b64=signature_data,
         client_name=args.name,
         sign_date=args.date,

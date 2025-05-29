@@ -6,10 +6,13 @@ from app.db.models import SignatureRequest, SignatureStatus
 from app.db.session import get_session
 from datetime import datetime, timedelta, timezone
 import hashlib
+import requests  # ensure this is at the top of the file if not already
 import uuid
 import hmac
 import os
 import hashlib
+from app.core.signer import embed_signature_on_pdf
+from app.core.pdf_loader import get_template_path
 
 api_bp = Blueprint("esign_api", __name__, url_prefix="/api/v1")
 
@@ -93,9 +96,19 @@ def initiate_signature():
     session.commit()
     logger.info(f"Successfully created signature request for client: {data['client_name']}")
 
+    full_url = f"https://esign.dlaw.app/v1/sign/{token}"
+    # Send URL to RingCentral webhook for testing
+    try:
+        rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
+        rc_payload = {"signing_url": full_url}
+        rc_response = requests.post(rc_webhook_url, json=rc_payload)
+        logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code}")
+    except Exception as e:
+        logger.error(f"Error posting to RingCentral webhook: {e}")
     return jsonify({
         "message": "Signature request created",
         "token": token,
+        "signing_url": full_url,
         "expires_at": signature_request.expires_at.isoformat()
     }), 201
 
@@ -130,6 +143,21 @@ def sign_document(token):
     if request.remote_addr and request.remote_addr != '':
         signature_request.signed_ip = request.remote_addr
     signature_request.user_agent = request.headers.get("User-Agent", "Unknown")
+
+    # Generate and save the signed PDF
+    template_path = get_template_path(signature_request.template_type)
+    output_dir = os.path.abspath("signed")
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{token_hash[:8]}_signed.pdf")
+
+    embed_signature_on_pdf(
+        template_path=template_path,
+        output_path=output_path,
+        signature_b64=data.get("signature"),
+        client_name=signature_request.client_name,
+        sign_date=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
+    signature_request.pdf_path = output_path
 
     # Append to audit log
     log_entry = create_audit_log_event(
