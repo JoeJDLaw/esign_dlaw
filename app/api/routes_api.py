@@ -54,6 +54,13 @@ def create_audit_log_event(event: str, **details):
         **details
     }
 
+def should_send_webhook() -> bool:
+    """
+    Check if webhooks should be sent based on environment configuration.
+    Returns True if webhooks are enabled, False if disabled.
+    """
+    return os.environ.get("DISABLE_WEBHOOKS", "").lower() != "true"
+
 @api_bp.route("/initiate", methods=["POST"])
 def initiate_signature():
     if not is_valid_hmac_request(request):
@@ -100,23 +107,24 @@ def initiate_signature():
     logger.info(f"Successfully created signature request for client: {data['client_name']}")
 
     # Send URL to RingCentral webhook for testing
-    try:
-        rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
-        rc_payload = {
-            "text": (
-                f"New document ready for signing:\n"
-                f"URL: {full_url}\n"
-                f"Name: {data.get('client_name', '')}\n"
-                f"Email: {data.get('client_email', '')}\n"
-                f"Template: {data.get('template_type', '')}\n"
-                f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
-                f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-            )
-        }
-        rc_response = requests.post(rc_webhook_url, json=rc_payload)
-        logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
-    except Exception as e:
-        logger.error(f"Error posting to RingCentral webhook: {e}")
+    if should_send_webhook():
+        try:
+            rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
+            rc_payload = {
+                "text": (
+                    f"New document ready for signing:\n"
+                    f"URL: {full_url}\n"
+                    f"Name: {data.get('client_name', '')}\n"
+                    f"Email: {data.get('client_email', '')}\n"
+                    f"Template: {data.get('template_type', '')}\n"
+                    f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
+                    f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                )
+            }
+            rc_response = requests.post(rc_webhook_url, json=rc_payload)
+            logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
+        except Exception as e:
+            logger.error(f"Error posting to RingCentral webhook: {e}")
     return jsonify({
         "message": "Signature request created",
         "token": token,

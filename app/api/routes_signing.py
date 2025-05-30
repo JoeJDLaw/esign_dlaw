@@ -17,6 +17,13 @@ from app.core.signer import embed_signature_on_pdf
 
 signing_bp = Blueprint("esign_signing", __name__, url_prefix="/v1/sign")
 
+def should_send_webhook() -> bool:
+    """
+    Check if webhooks should be sent based on environment configuration.
+    Returns True if webhooks are enabled, False if disabled.
+    """
+    return os.environ.get("DISABLE_WEBHOOKS", "").lower() != "true"
+
 def cleanup_prefilled_pdfs(max_age_hours: int = 24) -> tuple[int, int]:
     """
     Clean up old sample PDFs from the preview directory.
@@ -219,7 +226,7 @@ def thank_you():
         session = get_session()
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         signature_request = session.query(SignatureRequest).filter_by(token_hash=token_hash).first()
-        if signature_request:
+        if signature_request and should_send_webhook():
             # Send webhook to RingCentral for signature completion
             try:
                 rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"

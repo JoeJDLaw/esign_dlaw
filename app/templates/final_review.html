@@ -80,7 +80,7 @@
         <iframe src="{{ url_for('esign_signing.serve_signed_pdf', filename=signed_filename) }}" type="application/pdf"></iframe>
     </div>
     <div class="buttons">
-        <a class="download-btn" href="{{ url_for('esign_signing.serve_signed_pdf', filename=signed_filename) }}" download>Download PDF</a>
+        <a class="download-btn" href="{{ url_for('esign_signing.serve_signed_pdf', filename=signed_filename) }}" target="_blank" rel="noopener">Download PDF</a>
         <a class="complete-btn" href="{{ url_for('esign_signing.thank_you') }}?token={{ token }}">Complete</a>
     </div>
 </body>
