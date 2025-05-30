@@ -1,0 +1,78 @@
+{
+  "cea": {
+    "path": "templates/cea.pdf",
+    "pages": 1,
+    "signature_fields": [
+      {
+        "page": 1,
+        "x": 130,
+        "y": 90,
+        "width": 160,
+        "height": 35,
+        "label": "Client Signature Image (CEA - Page 1)"
+      },
+      {
+        "page": 1,
+        "x": 120,
+        "y": 137,
+        "width": 150,
+        "height": 15,
+        "label": "Client Name (CEA - Page 1)"
+      },
+      {
+        "page": 1,
+        "x": 362,
+        "y": 95,
+        "width": 100,
+        "height": 15,
+        "label": "Signing Date (CEA - Page 1)"
+      }
+    ]
+  },
+  "cea_rra": {
+    "path": "templates/cea_rra.pdf",
+    "pages": 2,
+    "signature_fields": [
+      {
+        "page": 1,
+        "x": 130,
+        "y": 90,
+        "width": 160,
+        "height": 35,
+        "label": "Client Signature Image (CEA_RRA - Page 1)"
+      },
+      {
+        "page": 1,
+        "x": 120,
+        "y": 137,
+        "width": 150,
+        "height": 15,
+        "label": "Client Name (CEA_RRA - Page 1)"
+      },
+      {
+        "page": 1,
+        "x": 362,
+        "y": 95,
+        "width": 100,
+        "height": 15,
+        "label": "Signing Date (CEA_RRA - Page 1)"
+      },
+      {
+        "page": 2,
+        "x": 340,
+        "y": 495,
+        "width": 160,
+        "height": 35,
+        "label": "Client Signature Image (CEA_RRA - Page 2)"
+      },
+      {
+        "page": 2,
+        "x": 120,
+        "y": 500,
+        "width": 100,
+        "height": 15,
+        "label": "Signing Date (CEA_RRA - Page 2)"
+      }
+    ]
+  }
+}

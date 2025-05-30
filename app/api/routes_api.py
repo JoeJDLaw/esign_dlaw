@@ -157,13 +157,12 @@ def sign_document(token):
     signature_request.user_agent = request.headers.get("User-Agent", "Unknown")
 
     # Generate and save the signed PDF
-    template_path = get_template_path(signature_request.template_type)
     output_dir = os.path.abspath("signed")
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{token_hash[:8]}_signed.pdf")
 
     embed_signature_on_pdf(
-        template_path=template_path,
+        template_key=signature_request.template_type,
         output_path=output_path,
         signature_b64=data.get("signature"),
         client_name=signature_request.client_name,

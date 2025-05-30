@@ -37,3 +37,5 @@ app/static/esign-troubleshooting-notes.md
 app/static/assets/
 prefill/
 preview/
+tests/sample_exports/
+/tests/sample_data/

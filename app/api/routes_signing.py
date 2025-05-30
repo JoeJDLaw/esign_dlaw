@@ -74,7 +74,7 @@ def generate_prefilled_pdf(template_path: str, token_hash: str, client_name: str
 
         # Use embed_signature_on_pdf with preview flag, and get the actual output path
         actual_output_path = embed_signature_on_pdf(
-            template_path=template_path,
+            template_key=os.path.splitext(os.path.basename(template_path))[0],
             output_path=output_path,
             signature_b64="",  # Not used for preview
             client_name=client_name,
@@ -173,13 +173,12 @@ def submit_signature(token):
         return jsonify({"error": "Missing signature data."}), 400
 
     try:
-        template_path = get_template_path(signature_request.template_type)
         output_dir = os.path.abspath("signed")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, f"{token_hash[:8]}_signed.pdf")
 
         signed_pdf_path = embed_signature_on_pdf(
-            template_path=template_path,
+            template_key=signature_request.template_type,
             output_path=output_path,
             signature_b64=signature_b64,
             client_name=signature_request.client_name,

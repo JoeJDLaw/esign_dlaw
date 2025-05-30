@@ -18,12 +18,8 @@ logger = configure_logging(name="apps.esign.pdf_loader", logfile="esign.log", le
 
 TEMPLATE_MAP = {
     # Primary identifiers
-    "cea": "tests/sample_data/cea.pdf",
-    "cea_rra": "tests/sample_data/cea_rra.pdf",
-
-    # Legacy or alias identifiers
-    "case_eval": "tests/sample_data/cea.pdf",
-    "case_eval_plus_records": "tests/sample_data/cea_rra.pdf"
+    "cea": "templates/cea.pdf",
+    "cea_rra": "templates/cea_rra.pdf",
 }
 
 def get_template_path(template_type: str) -> str:

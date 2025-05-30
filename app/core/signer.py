@@ -14,6 +14,7 @@ import io
 import logging
 import os
 import re
+import json
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -23,20 +24,17 @@ from shared.log_utils.logging_config import configure_logging
 from PIL import Image
 from datetime import datetime
 
+with open("/srv/apps/esign/config/template_registry.json", "r") as f:
+    TEMPLATE_REGISTRY = json.load(f)
+
 logger = configure_logging(name="apps.esign.signer", logfile="esign.log", level=None)
 
 def embed_signature_on_pdf(
-    template_path: str,
+    template_key: str,
     output_path: str,
     signature_b64: str,
     client_name: str,
     sign_date: str,
-     # Client name coordinates (x, y)
-    name_coords: tuple[int, int] = (120, 137),
-    # Signature image coordinates (x, y)
-    signature_coords: tuple[int, int] = (130, 90),
-    # Signing date coordinates (x, y)
-    date_coords: tuple[int, int] = (362, 95),
     test_mode: bool = False,
     smoke_test: bool = False,
     is_preview: bool = False
@@ -55,7 +53,11 @@ def embed_signature_on_pdf(
             logger.error(f"Invalid sign_date format: {sign_date}")
             raise ValueError("sign_date must be an ISO-formatted string (YYYY-MM-DD)")
 
-        # Validate that the template PDF exists
+        template_info = TEMPLATE_REGISTRY.get(template_key)
+        if not template_info:
+            raise ValueError(f"Template key '{template_key}' not found in registry.")
+        template_path = template_info["path"]
+        signature_fields = template_info["signature_fields"]
         if not os.path.isfile(template_path):
             logger.error(f"Template file does not exist: {template_path}")
             raise FileNotFoundError(f"Template PDF not found: {template_path}")
@@ -103,32 +105,41 @@ def embed_signature_on_pdf(
                 raise ValueError("Invalid signature image format or corrupt data.") from decode_err
             logger.info("Signature image successfully decoded and verified.")
 
-        # Create a PDF overlay in memory with the signature and client name/date
-        overlay_buffer = io.BytesIO()
-        c = canvas.Canvas(overlay_buffer, pagesize=letter)
+        overlay_buffers = {}
+        for field in signature_fields:
+            page = field["page"]
+            if page not in overlay_buffers:
+                overlay_buffers[page] = {
+                    "buffer": io.BytesIO(),
+                    "canvas": None
+                }
+                overlay_buffers[page]["canvas"] = canvas.Canvas(overlay_buffers[page]["buffer"], pagesize=letter)
 
-        # -- Position adjustments --
-        # You can fine-tune coordinates below for layout precision.
-        # Adjusted signature size to better fit the line space
-        c.drawImage(ImageReader(signature_img), *signature_coords, width=160, height=35, mask='auto')
-        # Draw the client name
-        c.setFont("Helvetica", 10)
-        c.drawString(*name_coords, client_name)
-        # Draw the signing date
-        c.drawString(*date_coords, sign_date)
-        c.save()
-        logger.info("Overlay PDF with signature, name, and date created.")
+        for field in signature_fields:
+            c = overlay_buffers[field["page"]]["canvas"]
+            x, y = field["x"], field["y"]
+            label = field["label"].lower()
+            if "signature" in label:
+                c.drawImage(ImageReader(signature_img), x, y, width=field["width"], height=field["height"], mask='auto')
+            elif "name" in label:
+                c.setFont("Helvetica", 10)
+                c.drawString(x, y, client_name)
+            elif "date" in label:
+                c.setFont("Helvetica", 10)
+                c.drawString(x, y, sign_date)
 
-        # Read both the original template and the overlay PDF
-        overlay_buffer.seek(0)
-        overlay_pdf = PdfReader(overlay_buffer)
+        for key in overlay_buffers:
+            overlay_buffers[key]["canvas"].save()
+            overlay_buffers[key]["buffer"].seek(0)
+
         template_pdf = PdfReader(template_path)
         writer = PdfWriter()
-
-        # Merge the overlay page onto the template's first page
-        base_page = template_pdf.pages[0]
-        base_page.merge_page(overlay_pdf.pages[0])
-        writer.add_page(base_page)
+        for i, page in enumerate(template_pdf.pages):
+            page_number = i + 1
+            if page_number in overlay_buffers:
+                overlay_pdf = PdfReader(overlay_buffers[page_number]["buffer"])
+                page.merge_page(overlay_pdf.pages[0])
+            writer.add_page(page)
 
         if smoke_test:
             logger.info("Smoke test complete. PDF pipeline executed successfully.")
@@ -141,7 +152,7 @@ def embed_signature_on_pdf(
             base_output_name = os.path.basename(output_path)
             timestamp_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
             name_part, ext_part = os.path.splitext(base_output_name)
-            final_output_name = f"{last_name}_{name_part}_{timestamp_suffix}{ext_part}"
+            final_output_name = f"{last_name}_{template_key}_{name_part}_{timestamp_suffix}{ext_part}"
             output_path = os.path.join(output_dir, final_output_name)
             # Write the signed output PDF to the given path
             with open(output_path, "wb") as f_out:
@@ -158,7 +169,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Manual test runner for embed_signature_on_pdf")
-    parser.add_argument("--template", required=True, help="Path to the template PDF file")
+    parser.add_argument("--template", required=True, help="Template key name from the registry")
     parser.add_argument("--output", required=True, help="Path to save the signed PDF")
     parser.add_argument("--signature", required=True, help="Path to a base64-encoded signature file (PNG)")
     parser.add_argument("--name", default="Test User", help="Client name")
@@ -177,10 +188,10 @@ if __name__ == "__main__":
 
     timestamp_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_output, ext = os.path.splitext(args.output)
-    output_with_timestamp = f"{base_output}_{timestamp_suffix}{ext}"
+    output_with_timestamp = f"{base_output}_{args.template}_{timestamp_suffix}{ext}"
 
-    embed_signature_on_pdf(
-        template_path=args.template,
+    output = embed_signature_on_pdf(
+        template_key=args.template,
         output_path=output_with_timestamp,
         signature_b64=signature_data,
         client_name=args.name,
@@ -188,3 +199,12 @@ if __name__ == "__main__":
         test_mode=args.test,
         smoke_test=args.smoke
     )
+
+    # Example test logic with updated variable usage
+    # (Assuming this block is for manual testing and demonstration)
+    if not args.test and not args.smoke:
+        assert os.path.exists(output)
+        assert os.path.getsize(output) > 1000
+        # Cleanup after test
+        if os.path.exists(output):
+            os.remove(output)
