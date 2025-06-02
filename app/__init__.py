@@ -1,9 +1,10 @@
 # File: /srv/apps/esign/app/__init__.py
-
+import sys
+sys.path.insert(0, "/srv/shared")
 
 import traceback
 from flask import jsonify
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 
 from flask import Flask
 from app.api.routes_api import api_bp

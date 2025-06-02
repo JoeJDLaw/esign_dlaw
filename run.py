@@ -1,13 +1,17 @@
+# FILE: /srv/apps/esign/run.py
+# DESCRIPTION: Run the eSign application.
+import sys
+sys.path.insert(0, "/srv/shared")
+
 """
 Entrypoint for the eSign application.
 """
 
 import os
-import sys
 import traceback
 from flask import jsonify
 from app import create_app
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 
 # Configure logging first
 logger = configure_logging(
