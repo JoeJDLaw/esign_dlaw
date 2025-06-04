@@ -74,5 +74,27 @@
         "label": "Signing Date (CEA_RRA - Page 2)"
       }
     ]
+  },
+    "rra": {
+    "path": "templates/rra.pdf",
+    "pages": 1,
+    "signature_fields": [
+      {
+        "page": 1,
+        "x": 340,
+        "y": 500,
+        "width": 160,
+        "height": 35,
+        "label": "Client Signature Image (RRA - Page 1)"
+      },
+      {
+        "page": 1,
+        "x": 120,
+        "y": 500,
+        "width": 100,
+        "height": 15,
+        "label": "Signing Date (RRA - Page 1)"
+      }
+    ]
   }
 }

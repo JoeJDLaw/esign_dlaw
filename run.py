@@ -1,15 +1,12 @@
 # FILE: /srv/apps/esign/run.py
-# DESCRIPTION: Run the eSign application.
-import sys
-sys.path.insert(0, "/srv/shared")
+# DESCRIPTION: Run the eSign application (production entrypoint for Gunicorn).
 
 """
 Entrypoint for the eSign application.
+Used by Gunicorn to start the app server.
 """
 
 import os
-import traceback
-from flask import jsonify
 from app import create_app
 from log_utils.logging_config import configure_logging
 
@@ -17,15 +14,8 @@ from log_utils.logging_config import configure_logging
 logger = configure_logging(
     name="esign",
     logfile="esign.log",
-    level=None  # Will use environment-based level
+    level=None  # Will use LOG_LEVEL from .env if present
 )
 
 # Create the Flask application
 app = create_app()
-
-if __name__ == "__main__":
-    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    port = int(os.getenv("FLASK_PORT", 5000))
-    
-    logger.info("Starting eSign application on port %d (debug: %s)", port, debug)
-    app.run(debug=debug, port=port)

@@ -1,20 +1,25 @@
-from shared.log_utils.logging_config import configure_logging
-logger = configure_logging("apps.esign.routes_api", "esign.log")
-
-from flask import Blueprint, request, jsonify, render_template
-from app.db.models import SignatureRequest, SignatureStatus
-from app.db.session import get_session
-from datetime import datetime, timedelta, timezone
-import hashlib
-import requests  # ensure this is at the top of the file if not already
+import os
 import uuid
 import hmac
-import os
 import hashlib
+import traceback
+from time import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import requests
+from flask import Blueprint, request, jsonify, render_template
+
+from log_utils.logging_config import configure_logging
+from app.db.models import SignatureRequest, SignatureStatus
+from app.db.session import get_session
 from app.core.signer import embed_signature_on_pdf
 from app.core.pdf_loader import get_template_path
 
+logger = configure_logging("apps.esign.routes_api", "esign.log")
+
 api_bp = Blueprint("esign_api", __name__, url_prefix="/api/v1")
+
 
 def is_valid_hmac_request(request):
     shared_secret = os.environ.get("SF_SECRET_KEY", "").encode()
@@ -31,8 +36,6 @@ def is_valid_hmac_request(request):
         logger.warning("Invalid X-Timestamp format")
         return False
 
-    # Prevent replay attacks: allow max 5 min drift
-    from time import time
     if abs(time() - timestamp_int) > 300:
         logger.warning("Request timestamp is outside the allowable window")
         return False
@@ -47,6 +50,7 @@ def is_valid_hmac_request(request):
 
     return True
 
+
 def create_audit_log_event(event: str, **details):
     return {
         "event": event,
@@ -54,12 +58,10 @@ def create_audit_log_event(event: str, **details):
         **details
     }
 
+
 def should_send_webhook() -> bool:
-    """
-    Check if webhooks should be sent based on environment configuration.
-    Returns True if webhooks are enabled, False if disabled.
-    """
     return os.environ.get("DISABLE_WEBHOOKS", "").lower() != "true"
+
 
 @api_bp.route("/initiate", methods=["POST"])
 def initiate_signature():
@@ -84,17 +86,17 @@ def initiate_signature():
         create_audit_log_event(
             "initiated",
             source="Salesforce",
-            request_data={field: data[field] for field in required_fields}
+            request_data={field: data.get(field) for field in required_fields}
         )
     ]
 
     full_url = f"https://esign.dlaw.app/v1/sign/{token}"
 
     signature_request = SignatureRequest(
-        client_name=data["client_name"],
-        client_email=data["client_email"],
-        template_type=data["template_type"],
-        salesforce_case_id=data["salesforce_case_id"],
+        client_name=data.get("client_name"),
+        client_email=data.get("client_email"),
+        template_type=data.get("template_type"),
+        salesforce_case_id=data.get("salesforce_case_id"),
         token_hash=token_hash,
         audit_log=audit_log,
         status=SignatureStatus.pending,
@@ -104,33 +106,35 @@ def initiate_signature():
 
     session.add(signature_request)
     session.commit()
-    logger.info(f"Successfully created signature request for client: {data['client_name']}")
+    logger.info(f"Successfully created signature request for client: {data.get('client_name')}")
 
-    # Send URL to RingCentral webhook for testing
     if should_send_webhook():
         try:
-            rc_webhook_url = "https://hooks.ringcentral.com/webhook/v2/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvdCI6ImMiLCJvaSI6IjMxNDY0MDc5MzciLCJpZCI6IjMwNzYyMTA3MTUifQ.L--SpnXvDawVy69XJykgCdIpHNmpADqsdV-DyZOXAhk"
-            rc_payload = {
-                "text": (
-                    f"New document ready for signing:\n"
-                    f"URL: {full_url}\n"
-                    f"Name: {data.get('client_name', '')}\n"
-                    f"Email: {data.get('client_email', '')}\n"
-                    f"Template: {data.get('template_type', '')}\n"
-                    f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
-                    f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-                )
-            }
-            rc_response = requests.post(rc_webhook_url, json=rc_payload)
-            logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
+            rc_webhook_url = os.environ.get("RC_WEBHOOK_URL")
+            if rc_webhook_url:
+                rc_payload = {
+                    "text": (
+                        f"New document ready for signing:\n"
+                        f"URL: {full_url}\n"
+                        f"Name: {data.get('client_name', '')}\n"
+                        f"Email: {data.get('client_email', '')}\n"
+                        f"Template: {data.get('template_type', '')}\n"
+                        f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
+                        f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                    )
+                }
+                rc_response = requests.post(rc_webhook_url, json=rc_payload)
+                logger.info(f"Posted signing URL to RingCentral webhook: {rc_response.status_code} {rc_response.text}")
         except Exception as e:
             logger.error(f"Error posting to RingCentral webhook: {e}")
+
     return jsonify({
         "message": "Signature request created",
         "token": token,
         "signing_url": full_url,
         "expires_at": signature_request.expires_at.isoformat()
     }), 201
+
 
 @api_bp.route("/sign/<token>", methods=["POST"])
 def sign_document(token):
@@ -156,32 +160,33 @@ def sign_document(token):
         logger.warning(f"Signature link expired. Token: {token[:8]}..., Expires: {signature_request.expires_at}")
         return jsonify({"error": "This link has expired"}), 403
 
-    # Update fields
     signature_request.status = SignatureStatus.signed
     signature_request.signed_at = datetime.now(timezone.utc)
-    # Only set signed_ip if we have a valid IP address
-    if request.remote_addr and request.remote_addr != '':
+    if request.remote_addr:
         signature_request.signed_ip = request.remote_addr
     signature_request.user_agent = request.headers.get("User-Agent", "Unknown")
 
-    # Generate and save the signed PDF
-    output_dir = os.path.abspath("signed")
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{token_hash[:8]}_signed.pdf")
+    # Create signed/YYYYMMDD subdirectory and pass it to embed_signature_on_pdf
+    signed_root = Path("signed").resolve()
+    today_folder = datetime.now().strftime("%Y%m%d")
+    dated_dir = signed_root / today_folder
+    dated_dir.mkdir(parents=True, exist_ok=True)
 
-    embed_signature_on_pdf(
+    base_name = f"{token_hash[:8]}_signed.pdf"
+    output_path = dated_dir / base_name
+
+    final_output_path = embed_signature_on_pdf(
         template_key=signature_request.template_type,
-        output_path=output_path,
+        output_path=str(output_path),
         signature_b64=data.get("signature"),
         client_name=signature_request.client_name,
         sign_date=datetime.utcnow().strftime("%Y-%m-%d"),
     )
-    signature_request.pdf_path = output_path
+    signature_request.pdf_path = final_output_path
 
-    # Append to audit log
     log_entry = create_audit_log_event(
         "signed",
-        ip=signature_request.signed_ip if hasattr(signature_request, 'signed_ip') else None,
+        ip=signature_request.signed_ip,
         user_agent=signature_request.user_agent
     )
     if isinstance(signature_request.audit_log, list):

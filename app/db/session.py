@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, scoped_session
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 
 # Configure logging
 logger = configure_logging(

@@ -24,7 +24,7 @@ TEMPLATES_TO_TEST = [
     if os.path.isfile(os.path.join(SAMPLE_DATA_DIR, os.path.basename(entry["path"])))
 ]
 
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 
 # Configure logger for test output
 logger = configure_logging(name="apps.esign.tests.signer", logfile="esign.log", level=None)

@@ -20,7 +20,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.utils import ImageReader
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 from PIL import Image
 from datetime import datetime
 
@@ -148,12 +148,17 @@ def embed_signature_on_pdf(
         if not test_mode:
             # Prepend last name and add timestamp to output filename
             last_name = client_name.strip().split()[-1].lower()
-            output_dir = os.path.dirname(output_path)
+            # Get current date as YYYYMMDD
+            date_folder = datetime.now().strftime("%Y%m%d")
+            # Create dated subfolder under the parent output dir
+            signed_root = os.path.dirname(output_path)
+            dated_output_dir = os.path.join(signed_root, date_folder)
+            os.makedirs(dated_output_dir, exist_ok=True)
             base_output_name = os.path.basename(output_path)
             timestamp_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
             name_part, ext_part = os.path.splitext(base_output_name)
             final_output_name = f"{last_name}_{template_key}_{name_part}_{timestamp_suffix}{ext_part}"
-            output_path = os.path.join(output_dir, final_output_name)
+            output_path = os.path.join(dated_output_dir, final_output_name)
             # Write the signed output PDF to the given path
             with open(output_path, "wb") as f_out:
                 writer.write(f_out)

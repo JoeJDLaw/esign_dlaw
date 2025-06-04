@@ -13,7 +13,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.api.routes_signing import cleanup_prefilled_pdfs
-from shared.log_utils.logging_config import configure_logging
+from log_utils.logging_config import configure_logging
 
 logger = configure_logging("apps.esign.cleanup", "esign.log")
 

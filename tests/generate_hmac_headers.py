@@ -17,7 +17,7 @@ except ImportError:
 faker = Faker()
 
 parser = argparse.ArgumentParser(description="Generate HMAC headers for eSign API")
-parser.add_argument("--template", type=str, required=True, help="Template type (e.g., cea or cea_rra)")
+parser.add_argument("--template", type=str, required=True, help="Template type (e.g., cea, rra, or cea_rra)")
 parser.add_argument("--client_name", type=str, default=faker.name(), help="Client name")
 parser.add_argument("--client_email", type=str, default=faker.email(), help="Client email")
 parser.add_argument("--date", type=str, default=str(date.today()), help="Date in YYYY-MM-DD format")
