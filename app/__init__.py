@@ -27,6 +27,11 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(signing_bp)
 
+    # Health check endpoint
+    @app.route("/health")
+    def health():
+        return {"status": "ok"}, 200
+
     # Public thank-you route
     @app.route("/thank-you")
     def thank_you():

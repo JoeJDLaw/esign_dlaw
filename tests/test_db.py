@@ -22,7 +22,7 @@ def run_test_insert_and_query():
         user_agent="TestAgent/1.0",
         audit_log={"event": "created_in_test_script"},
         salesforce_case_id="CASE-REPL-001",
-        status=SignatureStatus.pending,
+        status=SignatureStatus.Sent,
         token_hash=hashed_token,
         expires_at=datetime.utcnow() + timedelta(days=2),
     )

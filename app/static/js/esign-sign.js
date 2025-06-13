@@ -25,7 +25,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     document.getElementById("submit-btn").addEventListener("click", () => {
+        const submitBtn = document.getElementById("submit-btn");
         const consentChecked = document.getElementById("consent").checked;
+        const loadingMsg = document.getElementById("loading-msg");
 
         if (!consentChecked) {
             alert("You must agree to the terms before signing.");
@@ -38,6 +40,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         const signatureData = signaturePad.toDataURL();
+
+        // Disable the button and show loading
+        submitBtn.disabled = true;
+        if (loadingMsg) loadingMsg.style.display = "block";
 
         fetch(`/v1/sign/${token}`, {
             method: "POST",
@@ -67,6 +73,9 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(err => {
                 console.error(err);
                 alert(err.message || "Error submitting signature.");
+                // Re-enable the button and hide loading on error
+                submitBtn.disabled = false;
+                if (loadingMsg) loadingMsg.style.display = "none";
             });
     });
 });

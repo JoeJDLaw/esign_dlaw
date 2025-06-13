@@ -32,3 +32,4 @@ signed/
 tests/sample_exports/
 Thumbs.db
 .venv/
+secrets/

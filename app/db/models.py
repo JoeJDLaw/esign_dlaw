@@ -12,10 +12,12 @@ import datetime
 Base = declarative_base()
 
 class SignatureStatus(enum.Enum):
-    pending = "pending"
-    signed = "signed"
-    expired = "expired"
-    canceled = "canceled"
+    Sent = "Sent"
+    Delivered = "Delivered"
+    Completed = "Completed"
+    Declined = "Declined"
+    Expired = "Expired"
+    Delivery_Failure = "Delivery Failure"
 
 class SignatureRequest(Base):
     __tablename__ = "signature_requests"
@@ -30,10 +32,12 @@ class SignatureRequest(Base):
     user_agent = Column(Text, nullable=True)
     audit_log = Column(JSON, nullable=True)
     salesforce_case_id = Column(String, nullable=False)
-    status = Column(Enum(SignatureStatus), default=SignatureStatus.pending)
+    token = Column(String, nullable=True)
+    status = Column(Enum(SignatureStatus), default=SignatureStatus.Sent)
     token_hash = Column(String, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     preview_path = Column(String, nullable=True)
     signing_url = Column(String, nullable=True)
+    envelope_document_id = Column(String, nullable=True)

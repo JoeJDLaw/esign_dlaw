@@ -16,9 +16,9 @@ logger = configure_logging(
 )
 
 # Load environment variables
-load_dotenv()
+load_dotenv("/srv/shared/.env")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/esign")
+DATABASE_URL = os.getenv("ESIGN_DATABASE_URL", "postgresql://localhost/esign")
 logger.debug("Using DATABASE_URL: %s", DATABASE_URL)
 
 try:

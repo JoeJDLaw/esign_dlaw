@@ -1,5 +1,3 @@
-# File: /srv/apps/esign/app/api/routes_signing.py
-
 from log_utils.logging_config import configure_logging
 logger = configure_logging("apps.esign.routes_signing", "esign.log")
 
@@ -13,6 +11,10 @@ import os
 import glob
 import requests
 from app.core.signer import embed_signature_on_pdf
+
+from utils.dropbox_api.factory import get_authenticated_client
+
+from app.api.update_envelope_document import update_envelope_document, find_envelope_id_by_token
 
 signing_bp = Blueprint("esign_signing", __name__, url_prefix="/v1/sign")
 
@@ -87,7 +89,13 @@ def sign_document(token):
         logger.warning("Signature request not found")
         abort(404)
 
-    if signature_request.status != SignatureStatus.pending:
+    # If status is Sent, update to Delivered
+    if signature_request.status == SignatureStatus.Sent:
+        signature_request.status = SignatureStatus.Delivered
+        session.commit()
+
+    # Allow both Sent and Delivered for backward compatibility
+    if signature_request.status not in [SignatureStatus.Sent, SignatureStatus.Delivered]:
         return "This document is no longer available for signing.", 403
 
     if signature_request.expires_at < datetime.now(timezone.utc):
@@ -113,6 +121,7 @@ def sign_document(token):
 @signing_bp.route("/<token>", methods=["POST"])
 def submit_signature(token):
     logger.info(f"Submitting signature for token: {token[:8]}...")
+    # dbx = get_authenticated_client()  # TODO: Re-enable when Dropbox is properly configured
     session = get_session()
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
@@ -120,7 +129,8 @@ def submit_signature(token):
     if not signature_request:
         return jsonify({"error": "Signature request not found."}), 404
 
-    if signature_request.status != SignatureStatus.pending:
+    # Allow both Sent and Delivered for backward compatibility
+    if signature_request.status not in [SignatureStatus.Sent, SignatureStatus.Delivered]:
         return jsonify({"error": "Document already signed."}), 403
 
     if signature_request.expires_at < datetime.now(timezone.utc):
@@ -143,7 +153,7 @@ def submit_signature(token):
             sign_date=datetime.utcnow().strftime("%Y-%m-%d")
         )
 
-        signature_request.status = SignatureStatus.signed
+        signature_request.status = SignatureStatus.Completed
         signature_request.signed_at = datetime.utcnow()
         signature_request.pdf_path = signed_pdf_path
         signature_request.signed_ip = request.headers.get("X-Forwarded-For", request.remote_addr).split(",")[0].strip()
@@ -155,7 +165,136 @@ def submit_signature(token):
             })
         session.commit()
 
-        return jsonify({"redirect_url": f"/v1/sign/final/{token}"})
+        import time
+
+        dropbox_folder = os.environ.get("DROPBOX_ESIGN_FOLDER", "/esign")
+        dropbox_path = f"{dropbox_folder}/{os.path.basename(signed_pdf_path)}"
+
+        # Prepare Salesforce update payload and try to find envelope_document_id if missing
+        from app.api.update_envelope_document import update_envelope_document, find_envelope_id_by_token
+
+        sf_update_payload = {
+            "dropbox_file_path__c": signed_pdf_path,
+            "Envelope_Status__c": "Completed",
+            "Sign_Date__c": signature_request.signed_at.isoformat(),
+            "Expiration_Date__c": signature_request.expires_at.date().isoformat() if signature_request.expires_at else None
+        }
+
+        envelope_document_id = signature_request.envelope_document_id
+
+        # Only use token-based lookup for Salesforce
+        if not envelope_document_id and hasattr(signature_request, 'token') and signature_request.token:
+            try:
+                envelope_document_id = find_envelope_id_by_token(signature_request.token)
+                if envelope_document_id:
+                    signature_request.envelope_document_id = envelope_document_id
+                    session.commit()
+                    logger.info(f"Retrieved envelope_document_id via token: {envelope_document_id}")
+                else:
+                    logger.warning("Could not resolve envelope_document_id via token lookup")
+            except Exception as e:
+                logger.exception(f"Error fetching envelope_document_id: {e}")
+
+        if not envelope_document_id:
+            logger.warning("No envelope_document_id found - skipping Salesforce update")
+
+        max_sf_attempts = 3
+        base_sf_delay = 2  # seconds
+        webhook_url = os.environ.get("RC_WEBHOOK_URL")
+        send_webhook = should_send_webhook()
+
+        # Only attempt Salesforce update if we have an envelope document ID
+        if envelope_document_id:
+            for attempt in range(1, max_sf_attempts + 1):
+                try:
+                    update_envelope_document(sf_update_payload, envelope_document_id)
+                    logger.info(f"Salesforce Envelope Document {envelope_document_id} updated. (attempt {attempt})")
+                    if send_webhook and webhook_url and isinstance(signature_request.audit_log, list):
+                        signature_request.audit_log.append({
+                            "event": "salesforce_update_success",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        session.commit()
+                        try:
+                            payload = {
+                                "text": (
+                                    f"Salesforce update succeeded for Envelope Document {envelope_document_id} "
+                                    f"on attempt {attempt}."
+                                )
+                            }
+                            response = requests.post(webhook_url, json=payload)
+                            logger.info(f"Webhook response: {response.status_code} {response.text}")
+                        except Exception:
+                            logger.exception("Failed to post Salesforce update success webhook")
+                    break
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt} to update Salesforce failed: {e}")
+                    if send_webhook and webhook_url and isinstance(signature_request.audit_log, list):
+                        signature_request.audit_log.append({
+                            "event": "salesforce_update_retry",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "attempt": attempt,
+                            "error": str(e)
+                        })
+                        session.commit()
+                        try:
+                            payload = {
+                                "text": (
+                                    f"Salesforce update retry {attempt} failed for Envelope Document {envelope_document_id}: {e}"
+                                )
+                            }
+                            response = requests.post(webhook_url, json=payload)
+                            logger.info(f"Webhook response: {response.status_code} {response.text}")
+                        except Exception:
+                            logger.exception("Failed to post Salesforce update retry webhook")
+                    if attempt < max_sf_attempts:
+                        sf_sleep_time = base_sf_delay * (2 ** (attempt - 1))
+                        logger.info(f"Retrying Salesforce update in {sf_sleep_time} seconds...")
+                        time.sleep(sf_sleep_time)
+                    else:
+                        logger.error(f"All attempts to update Salesforce failed for Envelope Document {envelope_document_id}")
+                        if send_webhook and webhook_url and isinstance(signature_request.audit_log, list):
+                            signature_request.audit_log.append({
+                                "event": "salesforce_update_failed",
+                                "timestamp": datetime.now(timezone.utc).isoformat()
+                            })
+                            session.commit()
+                            try:
+                                payload = {
+                                    "text": (
+                                        f"Salesforce update failed for Envelope Document {envelope_document_id} after {max_sf_attempts} attempts."
+                                    )
+                                }
+                                response = requests.post(webhook_url, json=payload)
+                                logger.info(f"Webhook response: {response.status_code} {response.text}")
+                            except Exception:
+                                logger.exception("Failed to post Salesforce update failure webhook")
+        else:
+            logger.info("Skipping Salesforce update - no envelope document ID available")
+
+        # TODO: Re-enable Dropbox upload when properly configured with refresh tokens
+        # dropbox_upload_success = False
+        # max_attempts = 3
+        # base_delay = 2  # seconds
+
+        # for attempt in range(1, max_attempts + 1):
+        #     try:
+        #         dbx.upload_file(dropbox_path, signed_pdf_path)
+        #         logger.info(f"Uploaded signed file to Dropbox: {dropbox_path} (attempt {attempt})")
+        #         dropbox_upload_success = True
+        #         break
+        #     except Exception as e:
+        #         logger.warning(f"Attempt {attempt} failed to upload to Dropbox: {e}")
+        #         if attempt < max_attempts:
+        #             sleep_time = base_delay * (2 ** (attempt - 1))
+        #             logger.info(f"Retrying in {sleep_time} seconds...")
+        #             time.sleep(sleep_time)
+
+        response_data = {"redirect_url": f"/v1/sign/final/{token}"}
+        # if not dropbox_upload_success:
+        #     response_data["warning"] = "Document saved locally but Dropbox upload failed."
+        logger.info("Dropbox upload temporarily disabled - document saved locally only")
+        return jsonify(response_data)
     except Exception:
         logger.exception("Error processing signature")
         return jsonify({"error": "Error saving signed document."}), 500
@@ -172,6 +311,7 @@ def thank_you():
             webhook_url = os.environ.get("RC_WEBHOOK_URL")
             if webhook_url:
                 try:
+                    expires_date = signature_request.expires_at.date().isoformat() if signature_request.expires_at else ""
                     payload = {
                         "text": (
                             f"Signature completed!\n"
@@ -180,7 +320,9 @@ def thank_you():
                             f"Email: {signature_request.client_email}\n"
                             f"Template: {signature_request.template_type}\n"
                             f"Salesforce Case ID: {signature_request.salesforce_case_id}\n"
-                            f"Expires: {signature_request.expires_at.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+                            f"Envelope Document ID: {signature_request.envelope_document_id}\n"
+                            f"Status: {signature_request.status.value.title()}\n"
+                            f"Expires: {expires_date}\n"
                             f"Signed at: {signature_request.signed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if signature_request.signed_at else ''}"
                         )
                     }
@@ -227,7 +369,7 @@ def final_review(token):
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     signature_request = session.query(SignatureRequest).filter_by(token_hash=token_hash).first()
 
-    if not signature_request or signature_request.status != SignatureStatus.signed:
+    if not signature_request or signature_request.status != SignatureStatus.Completed:
         abort(403)
 
     if isinstance(signature_request.audit_log, list):

@@ -33,7 +33,7 @@ request = SignatureRequest(
     template_type=template_type,
     token_hash=token_hash,
     salesforce_case_id=salesforce_case_id,
-    status=SignatureStatus.pending,
+    status=SignatureStatus.Sent,
     expires_at=datetime.utcnow() + timedelta(minutes=expiration_minutes),
     created_at=datetime.utcnow(),
     updated_at=datetime.utcnow()
