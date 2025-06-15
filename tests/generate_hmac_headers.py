@@ -1,6 +1,7 @@
-# File: tests/generate_hmac_headers.py
+# File: /srv/apps/esign/tests/generate_hmac_headers.py
+
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv("/srv/shared/.env")
 
 import argparse
 import hmac

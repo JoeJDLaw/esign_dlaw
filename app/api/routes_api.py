@@ -118,15 +118,17 @@ def initiate_signature():
                     expires_date = signature_request.expires_at.date().isoformat() if signature_request.expires_at else ""
                     rc_payload = {
                         "text": (
-                            f"New document ready for signing:\n"
-                            f"URL: {full_url}\n"
-                            f"Name: {data.get('client_name', '')}\n"
-                            f"Email: {data.get('client_email', '')}\n"
-                            f"Template: {data.get('template_type', '')}\n"
-                            f"Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
-                            f"Envelope Document ID: {data.get('envelope_document_id', 'Not yet assigned')}\n"
-                            f"Status: {signature_request.status.value.title()}\n"
-                            f"Expires: {expires_date}"
+                            f"📝 New document ready for signing:\n"
+                            f"🔗 URL: {full_url}\n"
+                            f"👤 Name: {data.get('client_name', '')}\n"
+                            f"📧 Email: {data.get('client_email', '')}\n"
+                            f"📄 Template: {data.get('template_type', '')}\n"
+                            f"🏢 Salesforce Case ID: {data.get('salesforce_case_id', '')}\n"
+                            f"📋 Envelope Document ID: {data.get('envelope_document_id', 'Not yet assigned')}\n"
+                            f"📊 Status: {signature_request.status.value.title()}\n"
+                            f"⏰ Created: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+                            f"📅 Expires: {expires_date}\n"
+                            f"🎫 Token: {token[:8]}..."
                         )
                     }
                     rc_response = requests.post(rc_webhook_url, json=rc_payload)

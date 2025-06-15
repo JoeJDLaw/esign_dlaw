@@ -40,6 +40,25 @@ def get_salesforce_token():
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to obtain Salesforce token: {e}")
 
+def should_send_webhook() -> bool:
+    """Check if webhooks should be sent (respects DISABLE_WEBHOOKS setting)."""
+    return os.environ.get("DISABLE_WEBHOOKS", "").lower() != "true"
+
+def send_webhook_if_enabled(message: str):
+    """Send webhook notification if webhooks are enabled."""
+    if not should_send_webhook():
+        logger.info(f"Webhook disabled - would have sent: {message}")
+        return
+        
+    try:
+        webhook_url = os.environ.get("RC_WEBHOOK_URL")
+        if webhook_url:
+            import requests
+            response = requests.post(webhook_url, json={"text": message}, timeout=5)
+            logger.info(f"Webhook sent: {response.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to send webhook: {e}")
+
 def update_envelope_document(updates: dict, record_id: str, max_attempts: int = 3):
     if not record_id:
         raise RuntimeError("No Envelope Document ID provided for update.")
@@ -52,7 +71,14 @@ def update_envelope_document(updates: dict, record_id: str, max_attempts: int = 
             sf.Envelope_Document__c.update(record_id, updates)
             return
         except Exception as e:
+            error_msg = f"Salesforce update retry {attempt} failed for Envelope Document {record_id}: {e}"
+            logger.warning(error_msg)
+            send_webhook_if_enabled(error_msg)
+            
             if attempt == max_attempts:
+                final_error_msg = f"Salesforce update failed for Envelope Document {record_id} after {max_attempts} attempts."
+                logger.error(final_error_msg)
+                send_webhook_if_enabled(final_error_msg)
                 raise RuntimeError(f"Failed to update Salesforce Envelope Document {record_id}: {e}")
             time.sleep(2 ** (attempt - 1))
 

@@ -26,8 +26,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.getElementById("submit-btn").addEventListener("click", () => {
         const submitBtn = document.getElementById("submit-btn");
+        const clearBtn = document.getElementById("clear-btn");
         const consentChecked = document.getElementById("consent").checked;
         const loadingMsg = document.getElementById("loading-msg");
+        const loadingOverlay = document.getElementById("loadingOverlay");
+        const pageContent = document.body;
 
         if (!consentChecked) {
             alert("You must agree to the terms before signing.");
@@ -41,9 +44,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const signatureData = signaturePad.toDataURL();
 
-        // Disable the button and show loading
-        submitBtn.disabled = true;
-        if (loadingMsg) loadingMsg.style.display = "block";
+        // Show enhanced loading state
+        showLoadingState(submitBtn, clearBtn, loadingMsg, loadingOverlay, pageContent);
 
         fetch(`/v1/sign/${token}`, {
             method: "POST",
@@ -73,9 +75,52 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(err => {
                 console.error(err);
                 alert(err.message || "Error submitting signature.");
-                // Re-enable the button and hide loading on error
-                submitBtn.disabled = false;
-                if (loadingMsg) loadingMsg.style.display = "none";
+                // Re-enable everything on error
+                hideLoadingState(submitBtn, clearBtn, loadingMsg, loadingOverlay, pageContent);
             });
     });
+
+    function showLoadingState(submitBtn, clearBtn, loadingMsg, loadingOverlay, pageContent) {
+        // Disable all interactive elements
+        submitBtn.disabled = true;
+        clearBtn.disabled = true;
+        
+        // Disable signature pad
+        signaturePad.off();
+        
+        // Show loading overlay
+        if (loadingOverlay) {
+            loadingOverlay.style.display = "block";
+        }
+        
+        // Show old loading message as fallback
+        if (loadingMsg) {
+            loadingMsg.style.display = "block";
+        }
+        
+        // Prevent body scrolling
+        document.body.style.overflow = "hidden";
+    }
+
+    function hideLoadingState(submitBtn, clearBtn, loadingMsg, loadingOverlay, pageContent) {
+        // Re-enable interactive elements
+        submitBtn.disabled = false;
+        clearBtn.disabled = false;
+        
+        // Re-enable signature pad
+        signaturePad.on();
+        
+        // Hide loading overlay
+        if (loadingOverlay) {
+            loadingOverlay.style.display = "none";
+        }
+        
+        // Hide loading message
+        if (loadingMsg) {
+            loadingMsg.style.display = "none";
+        }
+        
+        // Restore body scrolling
+        document.body.style.overflow = "auto";
+    }
 });

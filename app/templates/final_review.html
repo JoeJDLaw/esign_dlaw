@@ -6,72 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="{{ url_for('static', filename='assets/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='esign/css/esign-sign.css') }}">
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #f9f9fb;
-            color: #333;
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 1rem;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            border-radius: 8px;
-            background: white;
-        }
-        h1 {
-            text-align: center;
-            color: #004085;
-        }
-        .document-final {
-            margin: 1.5rem 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            overflow: hidden;
-            background: #f8f9fa;
-        }
-        .document-final iframe {
-            width: 100%;
-            height: 500px;
-            border: none;
-        }
-        .final-label {
-            background: #004085;
-            color: white;
-            padding: 0.5rem 1rem;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .final-label::before {
-            content: "✔️";
-        }
-        .buttons {
-            margin-top: 1.5rem;
-            display: flex;
-            justify-content: space-between;
-        }
-        .download-btn, .complete-btn {
-            background-color: #004085;
-            color: white;
-            border: none;
-            padding: 0.7rem 1.5rem;
-            font-size: 1rem;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.2s;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .download-btn:hover, .complete-btn:hover {
-            background-color: #002752;
-        }
-        @media (max-width: 600px) {
-            .document-final iframe {
-                height: 300px;
-            }
-        }
-    </style>
 </head>
 <body>
     <h1>Review and Download Your Signed Document</h1>
@@ -80,8 +14,89 @@
         <iframe src="{{ url_for('esign_signing.serve_signed_pdf', filename=signed_filename) }}" type="application/pdf"></iframe>
     </div>
     <div class="buttons">
-        <a class="download-btn" href="{{ url_for('esign_signing.serve_signed_pdf', filename=signed_filename) }}" target="_blank" rel="noopener">Download PDF</a>
-        <a class="complete-btn" href="{{ url_for('esign_signing.thank_you') }}?token={{ token }}">Complete</a>
+        <a class="download-btn" href="{{ url_for('esign_signing.download_signed_pdf', filename=signed_filename) }}" target="_blank" rel="noopener">Download PDF</a>
+        <button class="finish-btn" onclick="showThankYouModal()">Finish</button>
     </div>
+
+    <!-- Thank You Modal -->
+    <div id="thankYouModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-icon">✅</div>
+            <div class="modal-title">Thank You!</div>
+            <div class="modal-message">
+                Your document has been successfully signed and processed.
+            </div>
+            <div class="modal-contact">
+                <strong>Questions?</strong><br>
+                Please contact your Case Manager for any questions or assistance.
+            </div>
+            <div class="modal-redirect">
+                You will be redirected to our main website in <span id="countdown">10</span> seconds.
+            </div>
+            <button class="modal-close-btn" onclick="closeModalAndRedirect()">Continue</button>
+        </div>
+    </div>
+
+    <script>
+        let redirectTimer;
+        let countdownTimer;
+        let countdownSeconds = 10;
+
+        function showThankYouModal() {
+            document.getElementById('thankYouModal').style.display = 'block';
+            // Prevent body scrolling when modal is open
+            document.body.style.overflow = 'hidden';
+            
+            // Reset countdown
+            countdownSeconds = 10;
+            document.getElementById('countdown').textContent = countdownSeconds;
+            
+            // Start countdown timer
+            countdownTimer = setInterval(function() {
+                countdownSeconds--;
+                document.getElementById('countdown').textContent = countdownSeconds;
+                
+                if (countdownSeconds <= 0) {
+                    clearInterval(countdownTimer);
+                }
+            }, 1000);
+            
+            // Auto-redirect after 10 seconds if user doesn't click Continue
+            redirectTimer = setTimeout(function() {
+                closeModalAndRedirect();
+            }, 10000);
+        }
+
+        function closeModalAndRedirect() {
+            // Clear both timers
+            if (redirectTimer) {
+                clearTimeout(redirectTimer);
+            }
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+            }
+            
+            // Restore body scrolling
+            document.body.style.overflow = 'auto';
+            // Hide modal
+            document.getElementById('thankYouModal').style.display = 'none';
+            // Redirect to main website
+            window.location.href = "https://d.law";
+        }
+
+        // Close modal if user clicks outside of it
+        document.getElementById('thankYouModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModalAndRedirect();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && document.getElementById('thankYouModal').style.display === 'block') {
+                closeModalAndRedirect();
+            }
+        });
+    </script>
 </body>
 </html> 
